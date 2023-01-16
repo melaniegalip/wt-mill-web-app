@@ -1,73 +1,74 @@
 <template>
-  <ErrorComponent :text="errorMessage"></ErrorComponent>
-  <HomePage v-if="!board" :isLoading="isLoading" @playerName="addPlayer" :text="introductionText"></HomePage>
-  <MillPage v-else :currentPlayer="currentPlayer" :playerName="playerName" :board="board" :gameState="gameState"
-    :errorMessage="errorMessage" @onAction="onAction"></MillPage>
+  <ErrorComponent :text="errorMessage" />
+  <router-view></router-view>
 </template>
 
 <script>
-import HomePage from './components/HomePage.vue';
 import ErrorComponent from './components/ErrorComponent.vue';
-import MillPage from './components/MillPage.vue';
-const channelRoute = "wss://localhost:9443";
+import { mapWritableState } from 'pinia';
+import { useState } from './state';
+
+const channelRoute =
+  process.env.NODE_ENV === 'development'
+    ? 'ws://localhost:9000'
+    : 'wss://vast-headland-57022.herokuapp.com';
+
 export default {
   name: 'App',
-  components: {
-    HomePage,
-    ErrorComponent,
-    MillPage
-  },
   data() {
     return {
-      channel: new WebSocket(channelRoute),
-      isLoading: true,
-      playerName: '',
-      introductionText: '',
-      errorMessage: '',
-      board: null,
-      gameState: '',
-      currentPlayer: '',
-    };
+      keepAliveInterval: null
+    }
+  },
+  components: {
+    ErrorComponent,
+  },
+  computed: {
+    ...mapWritableState(useState, [
+      'channel',
+      'isLoading',
+      'player',
+      'introductionText',
+      'errorMessage',
+      'board',
+      'gameState',
+      'currentPlayer',
+    ]),
   },
   created() {
+    this.channel = new WebSocket(channelRoute);
     this.onChannel();
+
   },
   methods: {
-    addPlayer(playerName) {
-      this.playerName = playerName;
-      this.channel.send(
-        JSON.stringify({
-          playerName,
-        })
-      );
-    },
-    onAction(command) {
-      this.isLoading = true;
-      this.channel.send(JSON.stringify(command));
-    },
     restartChannel() {
+      console.log("restarting channel")
+      if (this.$route.name !== 'home') {
+        this.$router.push({ name: 'home' });
+      }
+      clearInterval(this.keepAliveInterval)
       this.isLoading = true;
       this.errorMessage = '';
       this.board = null;
       this.gameState = '';
       this.currentPlayer = '';
-      this.playerName = '';
       this.introductionText = '';
       this.channel.close();
       this.channel = new WebSocket(channelRoute);
       this.onChannel();
+
     },
     onChannel() {
-      this.channel.setTimeout;
-      setInterval(() => {
-        this.channel.send(JSON.stringify({keepAlive: true}))
-      }, 5000);
       this.channel.onopen = (event) => {
         console.info('Connected to channel', event);
+        this.keepAliveInterval = setInterval(() => {
+          this.channel.send(JSON.stringify({ keepAlive: true }));
+        }, 5000);
       };
 
       this.channel.onclose = (event) => {
         console.info('Disconnected from channel', event);
+        this.restartChannel();
       };
 
       this.channel.onerror = (error) => {
@@ -87,7 +88,7 @@ export default {
           switch (data.event) {
             case 'GAME_INTRODUCTION':
               this.introductionText = data.introductionText;
-              this.isLoading = false
+              this.isLoading = false;
               break;
             case 'WAITING_FOR_SECOND_PLAYER':
               this.isLoading = true;
@@ -97,6 +98,10 @@ export default {
               this.board = data.board;
               this.gameState = data.gameState;
               this.currentPlayer = data.currentPlayer;
+              if (this.$route.name === 'home') {
+                this.$router.push({ name: 'mill' });
+              }
+              this.isLoading = false
               break;
             case 'GAME_QUIT':
               this.restartChannel();
@@ -112,5 +117,5 @@ export default {
 </script>
 
 <style lang="scss">
-@import '@/assets/stylesheets/main'
+@import '@/assets/stylesheets/main';
 </style>
