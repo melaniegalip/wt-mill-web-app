@@ -11,7 +11,7 @@ import { useState } from './state';
 const channelRoute =
   process.env.NODE_ENV === 'development'
     ? 'ws://localhost:9000'
-    : 'wss://vast-headland-57022.herokuapp.com';
+    : 'wss://mill-web-server.onrender.com';
 
 export default {
   name: 'App',
